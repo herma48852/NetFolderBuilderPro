@@ -350,6 +350,9 @@ class LayoutManager {
             this.currentPaletteSides = null;
             this._freeNetDirty = true;
             this.canvas.style.cursor = 'grab';
+            // Refresh the 3D viewer so the new face appears immediately —
+            // works even for a single polygon with no connections yet.
+            this.app.update3DViewer();
             this.draw();
             return;
         }
@@ -429,6 +432,12 @@ class LayoutManager {
             const dy = m.y - this.lastMouseWorld.y;
             this.draggedComponent.forEach(faceIdx => {
                 this.faceCoords2D[faceIdx].forEach(p => { p.x += dx; p.y += dy; });
+                // Keep free-build polygons in sync so the net renders at the
+                // dragged position immediately.  Free-build faces are drawn from
+                // each polygon's own center/rotation (not faceCoords2D), so
+                // without this the net would lag behind the mouse until mouse-up.
+                const fp = this.freePolygons[faceIdx];
+                if (fp) { fp.center.x += dx; fp.center.y += dy; }
             });
             this.lastMouseWorld = m;
             this.calculateSnaps();
@@ -643,13 +652,25 @@ class LayoutManager {
 
     // --- Rotation ---
     rotateComponent(component, angle, center) {
+        const cos = Math.cos(angle), sin = Math.sin(angle);
         component.forEach(faceIdx => {
             this.faceCoords2D[faceIdx].forEach(p => {
                 const dx = p.x - center.x;
                 const dy = p.y - center.y;
-                p.x = center.x + dx * Math.cos(angle) - dy * Math.sin(angle);
-                p.y = center.y + dx * Math.sin(angle) + dy * Math.cos(angle);
+                p.x = center.x + dx * cos - dy * sin;
+                p.y = center.y + dx * sin + dy * cos;
             });
+            // Keep free-build polygons in sync (same class of bug as dragging):
+            // free-build faces are drawn from each polygon's own data, so the
+            // rotation must be mirrored to the Polygon objects too.
+            const fp = this.freePolygons[faceIdx];
+            if (fp) {
+                const dx = fp.center.x - center.x;
+                const dy = fp.center.y - center.y;
+                fp.center.x = center.x + dx * cos - dy * sin;
+                fp.center.y = center.y + dx * sin + dy * cos;
+                fp.rotationAngle = Polygon.normalizeAngle(fp.rotationAngle + angle);
+            }
         });
         this.app.update3DViewer();
         this.draw();
@@ -856,6 +877,10 @@ class LayoutManager {
                 poly.setColor(ev.target.value);
                 this.customColorsHistory = [ev.target.value, ...this.customColorsHistory.filter(c => c !== ev.target.value)].slice(0, 8);
                 document.body.removeChild(input);
+                // Refresh the 3D viewer so the new color shows immediately
+                // (buildFreeNetForFolding rebuilds faceColors from poly colors).
+                this._freeNetDirty = true;
+                this.app.update3DViewer();
                 this.draw();
             });
             input.click();
@@ -864,6 +889,9 @@ class LayoutManager {
             if (!Object.values(Polygon.DEFAULT_COLORS).includes(colorValue)) {
                 this.customColorsHistory = [colorValue, ...this.customColorsHistory.filter(c => c !== colorValue)].slice(0, 8);
             }
+            // Refresh the 3D viewer so the new color shows immediately.
+            this._freeNetDirty = true;
+            this.app.update3DViewer();
             this.draw();
         }
     }
@@ -1206,7 +1234,10 @@ class LayoutManager {
      */
     _syncToFolding() {
         if (this.app.polyhedron && this.app.polyhedron.name !== 'Free-Built Net') return;
-        if (this.freePolygons.length === 0 || this.freeConnections.length === 0) return;
+        // A net with faces but no connections (e.g. a single just-placed
+        // polygon, or several disconnected pieces) is still foldable — each
+        // face renders as a flat disconnected piece.  Don't bail on it.
+        if (this.freePolygons.length === 0) return;
         if (!this._freeNetDirty) return;
         this._syncFreeToLibrary();
         this.buildFreeNetForFolding();
@@ -1376,11 +1407,12 @@ class LayoutManager {
             }
         }
 
-        // 4. Build synthetic polyhedron
+        // 4. Build synthetic polyhedron (carry per-polygon colors for the 3D renderer)
         this.app.polyhedron = {
             name: 'Free-Built Net',
             vertices: vertices,
-            faces: faces
+            faces: faces,
+            faceColors: this.freePolygons.map(p => p.color)
         };
 
         // 5. Override layout data
