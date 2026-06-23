@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" class="h-screen w-screen overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetFolderBuilder Pro - Universal Topology Engine</title>
+    <!-- Styling Framework & Custom Stylesheet -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="index.css">
+    <!-- Math and Rendering Engines -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col overflow-hidden select-none">
+
+    <!-- Header Stats Dashboard -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-400 rounded-xl border border-indigo-500/30 shadow-inner">
+                <i data-lucide="box" class="w-6 h-6 animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    NetFolderBuilder <span class="text-xs bg-indigo-500/20 text-indigo-300 font-mono px-2 py-0.5 rounded-full border border-indigo-500/30 ml-2">PRO v3.0</span>
+                </h1>
+                <p class="text-[11px] text-slate-400 mt-0.5">Universal topological edge snapping & dynamic unfolding</p>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 sm:gap-6 text-sm bg-slate-950/80 px-4 py-2.5 rounded-2xl border border-slate-800/80 shadow-lg">
+            <div class="flex items-center gap-2">
+                <span class="text-slate-500 font-medium">Solid:</span>
+                <span id="stat-name" class="font-bold text-indigo-400 tracking-wide">-</span>
+                <span id="stat-subset" class="hidden text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20"></span>
+            </div>
+            <div class="hidden md:block h-4 w-px bg-slate-800"></div>
+            <div class="flex items-center gap-3.5 code-font text-xs">
+                <div><span class="text-slate-500">V:</span> <span id="stat-v" class="text-emerald-400 font-bold">0</span></div>
+                <div><span class="text-slate-500">E:</span> <span id="stat-e" class="text-amber-400 font-bold">0</span></div>
+                <div><span class="text-slate-500">F:</span> <span id="stat-f" class="text-indigo-400 font-bold">0</span></div>
+            </div>
+            <div class="h-4 w-px bg-slate-800"></div>
+            <div id="overlap-indicator" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm transition-all duration-300">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span class="tracking-wider uppercase">NET VALID</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 h-0 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
+        <!-- Sidebar Controls panel -->
+        <section class="w-full md:w-80 bg-slate-900 border-r border-slate-800 flex flex-col overflow-y-auto shrink-0 shadow-2xl z-[5]">
+            <!-- Shape Selection (Populated dynamically) -->
+            <div class="p-4 border-b border-slate-800">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-indigo-400"></i> Polyhedron Library
+                </label>
+                <select id="shape-selector" class="w-full bg-slate-950 border border-slate-800 text-slate-100 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer">
+                    <!-- Options populated by App.js -->
+                </select>
+            </div>
+
+            <!-- Incomplete Member Annotation Banner (shown when a free-built net
+                 folds as an incomplete subset of a library solid) -->
+            <div id="incomplete-member-banner" class="mx-4 mt-4 px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hidden">
+                <div class="flex items-center gap-2 text-amber-400 font-bold text-[11px] uppercase tracking-wider mb-1">
+                    <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+                    <span>Incomplete Fold</span>
+                </div>
+                <div id="incomplete-member-text" class="text-[11px] text-amber-200/90 leading-snug"></div>
+            </div>
+
+            <!-- Free Build Palette -->
+            <div class="p-4 border-b border-slate-800">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-2">
+                    <i data-lucide="shapes" class="w-4 h-4 text-emerald-400"></i> Free Build Palette
+                </label>
+                <div id="palette-buttons" class="grid grid-cols-3 gap-2">
+                    <button data-sides="3" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid #fbbf24;display:inline-block;margin-bottom:2px;"></span> Triangle
+                    </button>
+                    <button data-sides="4" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="width:12px;height:12px;background:#f87171;display:inline-block;margin-bottom:2px;"></span> Square
+                    </button>
+                    <button data-sides="5" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="width:12px;height:12px;background:#60a5fa;display:inline-block;border-radius:2px;margin-bottom:2px;"></span> Pentagon
+                    </button>
+                    <button data-sides="6" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="width:12px;height:12px;background:#4ade80;display:inline-block;border-radius:2px;margin-bottom:2px;"></span> Hexagon
+                    </button>
+                    <button data-sides="8" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-pink-500/20 text-pink-400 border border-pink-500/30 hover:bg-pink-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="width:12px;height:12px;background:#f472b6;display:inline-block;border-radius:50%;margin-bottom:2px;"></span> Octagon
+                    </button>
+                    <button data-sides="10" class="palette-btn w-full py-2 text-[11px] font-semibold rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 active:scale-95 transition-all">
+                        <span class="shape-icon" style="width:12px;height:12px;background:#fb923c;display:inline-block;border-radius:3px;margin-bottom:2px;"></span> Decagon
+                    </button>
+                </div>
+                <button id="btn-clear-canvas" class="w-full mt-2.5 py-1.5 text-[10px] font-semibold rounded-lg bg-slate-800/50 text-slate-400 border border-slate-700/30 hover:bg-slate-800 hover:text-slate-300 active:scale-95 transition-all">
+                    Clear Canvas
+                </button>
+            </div>
+
+            <!-- Folding Mechanics -->
+            <div class="p-4 border-b border-slate-800 flex flex-col gap-4">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="fold-vertical" class="w-4 h-4 text-indigo-400"></i> Fold Mechanics
+                        </label>
+                        <span id="fold-pct" class="text-xs code-font text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20 shadow-inner">0.0%</span>
+                    </div>
+                    <input id="fold-slider" type="range" min="0" max="100" value="0" class="w-full accent-indigo-500 bg-slate-950 h-1.5 rounded-lg cursor-pointer">
+                </div>
+
+                <div class="flex gap-2.5">
+                    <button id="btn-play" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition-colors text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-900/30">
+                        <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i> Auto Fold
+                    </button>
+                    <button id="btn-reset" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 transition-colors text-slate-300 hover:text-white text-xs font-semibold rounded-xl flex items-center justify-center border border-slate-700/50" title="Reset state">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Parameters panel -->
+            <div class="p-4 border-b border-slate-800 flex flex-col gap-4">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5 flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i> Render Parameters
+                </label>
+
+                <div class="space-y-2.5 text-xs">
+                    <label class="flex items-center gap-2.5 cursor-pointer select-none text-slate-300 hover:text-white transition-colors">
+                        <input id="chk-wireframe" type="checkbox" checked class="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 w-4 h-4">
+                        <span>3D Solid Wireframe</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 cursor-pointer select-none text-slate-300 hover:text-white transition-colors">
+                        <input id="chk-vertices" type="checkbox" checked class="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 w-4 h-4">
+                        <span>Show Joint Vertices</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 cursor-pointer select-none text-slate-300 hover:text-white transition-colors">
+                        <input id="chk-labels" type="checkbox" checked class="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 w-4 h-4">
+                        <span>Draw Face Indices</span>
+                    </label>
+                    <label class="flex items-center gap-2.5 cursor-pointer select-none text-slate-300 hover:text-white transition-colors">
+                        <input id="chk-collision" type="checkbox" checked class="rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-0 w-4 h-4">
+                        <span>Active SAT Collisions</span>
+                    </label>
+                </div>
+
+                <div class="space-y-2.5 border-t border-slate-800/60 pt-3">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-400">Face Color:</span>
+                        <div class="flex items-center gap-2">
+                            <input id="color-face" type="color" value="#6366f1" class="w-7 h-7 border-0 bg-transparent cursor-pointer rounded-lg overflow-hidden">
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-400">Snap Seam:</span>
+                        <div class="flex items-center gap-2">
+                            <input id="color-snap" type="color" value="#ec4899" class="w-7 h-7 border-0 bg-transparent cursor-pointer rounded-lg overflow-hidden">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exporters -->
+            <div class="p-4 flex flex-col gap-2 mt-auto shrink-0">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4 text-indigo-400"></i> Dynamic Exporters
+                </label>
+                <button id="btn-export-svg" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-100 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-700/60 shadow-md">
+                    <i data-lucide="scissors" class="w-4 h-4 text-emerald-400"></i> Export SVG Net Pattern
+                </button>
+                <button id="btn-export-obj" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-100 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-slate-700/60 shadow-md">
+                    <i data-lucide="package-open" class="w-4 h-4 text-amber-400"></i> Export Folded OBJ Mesh
+                </button>
+            </div>
+        </section>
+
+        <!-- Editor and Viewer Workspace panels -->
+        <section class="flex-1 h-full grid grid-cols-1 lg:grid-cols-2 relative overflow-hidden">
+            <!-- 2D Canvas Editor -->
+            <div class="relative border-r border-slate-800 flex flex-col h-full bg-slate-950 overflow-visible outline-none" tabindex="0" id="workspace-container">
+                <div class="absolute top-4 left-4 bg-slate-900/90 backdrop-blur border border-slate-800 px-3.5 py-2 rounded-xl flex items-center gap-2 z-[2] text-xs shadow-xl shadow-black/40">
+                    <span class="font-bold text-indigo-400 flex items-center gap-1.5">
+                        <i data-lucide="pencil" class="w-4 h-4"></i> Universal 2D Editor
+                    </span>
+                </div>
+                
+                <div class="absolute bottom-4 left-4 right-4 md:right-auto max-w-[95%] md:max-w-xs bg-slate-900/95 backdrop-blur border border-slate-800/80 p-3.5 rounded-xl z-[2] text-[10.5px] text-slate-400 shadow-2xl flex flex-col gap-2">
+                    <div class="font-bold text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
+                        <i data-lucide="help-circle" class="w-4 h-4 text-indigo-400"></i> Instructions:
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1">
+                        <li><strong class="text-slate-200">Drag faces</strong> to relocate pieces.</li>
+                        <li>Press <strong class="text-pink-400 font-semibold">'R' or 'L'</strong> while dragging/hovering to rotate pieces.</li>
+                        <li>Click <strong class="text-pink-400 font-semibold">Scissors (✂️)</strong> to split active seams.</li>
+                        <li>Drag open matching edges together to snap them!</li>
+                    </ul>
+                </div>
+                <div class="w-full h-full relative flex-1 min-h-0">
+                    <canvas id="canvas-2d" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing block"></canvas>
+                </div>
+
+                <!-- Color Context Menu (hidden by default) -->
+                <div id="colorContextMenu" class="context-menu" style="display:none;">
+                    <div class="menu-header">Change Color</div>
+                    <ul id="colorMenuList"></ul>
+                </div>
+            </div>
+
+            <!-- 3D Viewer -->
+            <div class="relative flex flex-col h-full bg-slate-950 overflow-hidden">
+                <div class="absolute top-4 left-4 bg-slate-900/90 backdrop-blur border border-slate-800 px-3.5 py-2 rounded-xl flex items-center gap-2 z-[2] text-xs shadow-xl shadow-black/40">
+                    <span class="font-bold text-purple-400 flex items-center gap-1.5">
+                        <i data-lucide="eye" class="w-4 h-4"></i> 3D Folding Viewer
+                    </span>
+                </div>
+                <div id="canvas-3d" class="w-full h-full flex-1 min-h-0"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Load App Modules -->
+    <script src="js/PolyRegistry.js"></script>
+    <script src="js/GeometryEngine.js"></script>
+    <script src="js/PolyDatabase.js"></script>
+    <script src="js/Polygon.js"></script>
+    <script src="js/LayoutManager.js"></script>
+    <script src="js/FoldingRenderer.js"></script>
+    <script src="js/App.js"></script>
+    <script>
+        // Trigger Lucide icon replacements initially
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+/* index.css - Premium Design System Stylesheet */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    --bg-primary: #020617;
+    --bg-secondary: #0f172a;
+    --border-color: #1e293b;
+    --accent-indigo: #6366f1;
+    --accent-purple: #a855f7;
+    --accent-pink: #ec4899;
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background-color: var(--bg-primary);
+}
+
+.code-font {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Premium Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+}
+
+/* Micro-animations and states */
+button {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+    transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(1.2);
+}
+
+/* Glowing accents */
+.glow-indigo {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+}
+
+.glow-purple {
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.15);
+}
+
+/* 2D editor workspace focus outline styling */
+#workspace-container:focus-within {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+
+/* Color Context Menu — exact port from NetFolderBuilder */
+.context-menu {
+    display: none;
+    position: absolute;
+    z-index: 200;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    border-radius: 4px;
+    padding: 5px 0;
+    min-width: 150px;
+    font-family: sans-serif;
+    font-size: 0.9em;
+}
+.context-menu .menu-header {
+    padding: 5px 15px;
+    font-weight: bold;
+    color: #555;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 5px;
+}
+.context-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.context-menu ul li {
+    padding: 8px 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: #333;
+}
+.context-menu ul li:hover {
+    background-color: #f0f0f0;
+}
+.context-menu ul li.separator {
+    height: 1px;
+    background: #ddd;
+    margin: 4px 8px;
+    padding: 0;
+    cursor: default;
+}
+.context-menu ul li.separator:hover {
+    background: #ddd;
+}
+.color-box {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 1px solid #aaa;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
