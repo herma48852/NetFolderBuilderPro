@@ -48,6 +48,7 @@ NetFolderBuilder Pro is a single-page, browser-based tool that pairs an interact
 - **Scissors (✂️)** appear at every detachable seam; clicking one splits a region (only when it isolates exactly one face).
 - **Edge snapping** — drag an open edge near another open edge of equal length and a dashed pink guide appears; release to snap and weld the seam.
 - **Right-click** any face (library or free-build) for a color context menu: per-polygon-type defaults, recent custom colors, or a free-form color picker.
+- **Random Proper Coloring** — click the button in the sidebar to assign every face a random color such that no two edge-adjacent faces share a color (proper graph coloring). Works on library solids and free-build nets alike.
 - **Global Face Color** and **Snap Seam** color pickers in the sidebar.
 
 ### Smart folding for custom nets
@@ -105,6 +106,7 @@ python3 -m http.server 8000
 - **Scroll** to zoom; **drag empty space** to pan.
 - The header's **NET VALID** pill turns into **OVERLAP WARNING** (red) when faces overlap in the 2D layout.
 - The **Clear Canvas** button wipes everything and resets the selector.
+- Click **Random Proper Coloring** in the Render Parameters section to instantly recolor every face so that no two edge-adjacent faces share a color. The result is always a valid graph coloring, with random variation each click.
 
 ---
 
@@ -133,6 +135,7 @@ The 2D interactive canvas. Responsibilities:
 - **Interaction** — mouse drag (whole connected component), pan, wheel zoom, `R`/`L` rotate (region around selected face as pivot), `Delete`/`Backspace` remove, edge-snap detection with visual guides, scissors detach (only when it isolates one face), right-click color menu.
 - **Overlap detection** — runs SAT (Separating Axis Theorem) on shrunk polygons every frame.
 - **Incomplete-fold matching** — when a free net has no exact library match, queries `PolyDatabase.bestSuperset` for the smallest containing member and inherits its dihedral angles; annotates the builder panel via the **Incomplete Fold** banner.
+- **Proper graph coloring** — `applyRandomProperColoring()` greedily colors the face-adjacency graph so no two edge-sharing faces share a color. Uses an 8-color palette with random shuffling, so each click produces a different valid coloring. Adjacency is detected via shared vertex indices (library solids) or geometric edge matching (free-build synthetic polyhedra).
 
 ### `FoldingRenderer.js`
 The Three.js 3D viewer. Builds a nested pivot hierarchy: each face is parented to a pivot group positioned at its shared edge with the parent face, so rotating a pivot swings its whole subtree. Per-component root pivots are placed at the face centroid. Dihedral angles come from 3D normals (library solids) or from the matched/inherited map (free-build nets). A 2D cross-product sign check decides whether each face folds inward or outward.
@@ -171,6 +174,19 @@ Each frame, every pair of 2D faces is tested with the **Separating Axis Theorem*
 
 ### Incomplete-fold (subset) matching
 When a free net's face counts don't exactly match any library solid, `PolyDatabase.bestSuperset` searches every solid whose face counts are a superset of the net's. For each candidate, a **bipartite matching** (Kuhn's algorithm) verifies that every net face can be assigned to a distinct solid face of the same type whose neighbour-type counts cover the net face's requirements — an adjacency-aware proxy for "the net is a connected subgraph of the solid." The candidate with the **fewest total faces** wins; its dihedrals are inherited and the builder panel is annotated.
+
+### Proper graph coloring
+The **Random Proper Coloring** feature solves a graph-coloring problem on the polyhedron's face-adjacency graph. Two faces are adjacent iff they share an edge. Adjacency is detected by:
+- **Library solids**: shared vertex indices in the polyhedron's face arrays (an edge is a pair of vertex indices; two faces sharing the same pair are adjacent).
+- **Free-build synthetic polyhedra**: vertices are unique per face (no index sharing), so edges are matched geometrically by endpoint position within `1e-3` tolerance. Two faces with coincident edge endpoints in 3D space are adjacent.
+
+With the adjacency graph built, `applyRandomProperColoring()` runs a greedy proper-coloring algorithm:
+1. The face order is randomly shuffled for variety.
+2. An 8-color palette (red, amber, yellow, green, cyan, blue, violet, pink) is randomly shuffled each invocation.
+3. For each face in order, the algorithm collects colors already used by its colored neighbours, then picks a random colour from the palette that is **not** in that forbidden set.
+4. If all eight colours are exhausted (impossible for any planar graph by the four-color theorem), a fallback picks randomly from the palette.
+
+The result is a proper coloring (no two adjacent faces share a colour) that differs each time the button is clicked. Colours are written to `polyhedron.faceColors` for the 3D renderer and mirrored to `freePolygons[i].color` for free-build 2D rendering.
 
 ---
 
@@ -242,6 +258,8 @@ Three issues addressed in the latest pass:
 3. **3D viewer followed 2D drags.** The folding area used to rebuild on every mouse-move during a drag, so it tracked the 2D net in real time. Fixed so the 3D mesh stays put during the drag and is rebuilt exactly once on mouse-up. (`LayoutManager.handleMouseMove` / `handleMouseUp`)
 
 4. **Rotate detached faces.** Pressing `R`/`L` on a selected free-build face used to delete its connections and spin it alone. Now the entire connected region rotates as a rigid body around the selected face (the pivot), with no detachment — only the scissors tool splits regions. (`LayoutManager._getFreeComponent` / `rotateFreeComponent`)
+
+5. **Random Proper Coloring.** Added a **Random Proper Coloring** button in the Render Parameters section that assigns every face a random colour such that no two edge-adjacent faces share a colour. The algorithm builds the face-adjacency graph (via shared vertex indices for library solids, geometric edge matching for free-build nets), then runs a greedy proper coloring with a shuffled 8-color palette and random face order — producing a different valid coloring on every click. (`LayoutManager.applyRandomProperColoring` / `_buildFaceAdjacency`)
 
 ---
 

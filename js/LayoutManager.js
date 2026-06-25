@@ -896,6 +896,134 @@ class LayoutManager {
         }
     }
 
+    // --- Random Proper Coloring (graph coloring of face-adjacency) ---
+
+    /**
+     * Palette of distinct colors used for random proper coloring.  Eight
+     * colors is more than enough for any convex polyhedron's face graph
+     * (the four-color theorem guarantees four suffice for planar graphs).
+     */
+    static PROPER_COLOR_PALETTE = [
+        '#ef4444', // red
+        '#f59e0b', // amber
+        '#eab308', // yellow
+        '#22c55e', // green
+        '#06b6d4', // cyan
+        '#3b82f6', // blue
+        '#8b5cf6', // violet
+        '#ec4899'  // pink
+    ];
+
+    /**
+     * Build the face-adjacency graph of the current polyhedron (two faces
+     * are adjacent iff they share an edge).  Works for both library solids
+     * (shared vertex indices) and free-build synthetic polyhedra (unique
+     * vertices per face → geometric edge matching by endpoint position).
+     */
+    _buildFaceAdjacency() {
+        const poly = this.app.polyhedron;
+        if (!poly || !poly.faces || poly.faces.length === 0) return [];
+        const n = poly.faces.length;
+        const adj = Array.from({ length: n }, () => new Set());
+        const verts = poly.vertices || [];
+
+        // Try index-based adjacency first (library solids share vertices).
+        const edgeMap = new Map();
+        poly.faces.forEach((face, fi) => {
+            for (let i = 0; i < face.length; i++) {
+                const u = face[i], v = face[(i + 1) % face.length];
+                const key = Math.min(u, v) + '_' + Math.max(u, v);
+                if (!edgeMap.has(key)) edgeMap.set(key, []);
+                edgeMap.get(key).push(fi);
+            }
+        });
+        let indexShared = false;
+        for (const [, fis] of edgeMap) {
+            if (fis.length >= 2) { indexShared = true; break; }
+        }
+
+        let map = edgeMap;
+        if (!indexShared && verts.length > 0) {
+            // Free-build synthetic polyhedron: vertices are unique per face,
+            // so match edges geometrically by endpoint position.
+            const keyOf = (p) => `${p[0].toFixed(3)},${p[1].toFixed(3)},${p[2].toFixed(3)}`;
+            const geoMap = new Map();
+            poly.faces.forEach((face, fi) => {
+                for (let i = 0; i < face.length; i++) {
+                    const pa = verts[face[i]], pb = verts[face[(i + 1) % face.length]];
+                    if (!pa || !pb) continue;
+                    const ka = keyOf(pa), kb = keyOf(pb);
+                    const ek = ka < kb ? ka + '|' + kb : kb + '|' + ka;
+                    if (!geoMap.has(ek)) geoMap.set(ek, []);
+                    geoMap.get(ek).push(fi);
+                }
+            });
+            map = geoMap;
+        }
+
+        for (const [, fis] of map) {
+            if (fis.length < 2) continue;
+            for (let a = 0; a < fis.length; a++) {
+                for (let b = a + 1; b < fis.length; b++) {
+                    adj[fis[a]].add(fis[b]);
+                    adj[fis[b]].add(fis[a]);
+                }
+            }
+        }
+        return adj;
+    }
+
+    /**
+     * Randomly color every face of the current solid so that no two
+     * edge-adjacent faces share a color (proper graph coloring).  Uses a
+     * greedy algorithm over a shuffled face order with a shuffled palette.
+     * Applies to both the 2D net and the 3D folded viewer immediately.
+     */
+    applyRandomProperColoring() {
+        const poly = this.app.polyhedron;
+        if (!poly || !poly.faces || poly.faces.length === 0) return;
+
+        const n = poly.faces.length;
+        const adj = this._buildFaceAdjacency();
+
+        const palette = LayoutManager.PROPER_COLOR_PALETTE.slice();
+        const shuffle = (arr) => {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        const order = shuffle([...Array(n).keys()]);
+        const colors = new Array(n).fill(null);
+
+        for (const fi of order) {
+            const used = new Set();
+            for (const nb of adj[fi]) {
+                if (colors[nb] !== null) used.add(colors[nb]);
+            }
+            // Pick a random available color from the (shuffled) palette.
+            const avail = palette.filter(c => !used.has(c));
+            colors[fi] = avail.length > 0
+                ? avail[Math.floor(Math.random() * avail.length)]
+                : palette[Math.floor(Math.random() * palette.length)];
+        }
+
+        // Apply to the polyhedron's per-face colors
+        if (!poly.faceColors || poly.faceColors.length < n) poly.faceColors = new Array(n);
+        for (let i = 0; i < n; i++) poly.faceColors[i] = colors[i];
+
+        // Mirror to free-build polygons (so free-build stays in sync)
+        if (this.freePolygons.length === n) {
+            this.freePolygons.forEach((p, i) => p.setColor(colors[i]));
+        }
+
+        this._freeNetDirty = true;
+        this.app.update3DViewer();
+        this.draw();
+    }
+
     // --- Free Polygon Snapping ---
 
     /**

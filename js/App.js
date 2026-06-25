@@ -54,6 +54,7 @@ class AppState {
 
         this.btnExportSvg = document.getElementById('btn-export-svg');
         this.btnExportObj = document.getElementById('btn-export-obj');
+        this.btnRandomColor = document.getElementById('btn-random-color');
     }
 
     populatePolyLibrary() {
@@ -161,6 +162,10 @@ class AppState {
 
         this.btnExportSvg.addEventListener('click', () => this.triggerSvgExport());
         this.btnExportObj.addEventListener('click', () => this.triggerObjExport());
+
+        this.btnRandomColor.addEventListener('click', () => {
+            this.layoutManager.applyRandomProperColoring();
+        });
     }
 
     loadSolid(key) {
