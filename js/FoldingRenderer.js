@@ -111,9 +111,23 @@ class FoldingRenderer {
         return mesh;
     }
 
+    /** Release GPU resources held by a pivot subtree (geometries + materials). */
+    _disposeGroup(group) {
+        group.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+        });
+    }
+
     rebuildFoldingMesh() {
-        // Always remove old geometry
+        // Always remove old geometry — and dispose it, otherwise every
+        // rebuild (drag end, color change, checkbox toggle) leaks GPU
+        // buffers/programs that JS garbage collection cannot reclaim.
         if (this.pivotGroup) {
+            this._disposeGroup(this.pivotGroup);
             this.scene.remove(this.pivotGroup);
             this.pivotGroup = null;
         }

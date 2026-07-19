@@ -261,6 +261,24 @@ Three issues addressed in the latest pass:
 
 5. **Random Proper Coloring.** Added a **Random Proper Coloring** button in the Render Parameters section that assigns every face a random colour such that no two edge-adjacent faces share a colour. The algorithm builds the face-adjacency graph (via shared vertex indices for library solids, geometric edge matching for free-build nets), then runs a greedy proper coloring with a shuffled 8-color palette and random face order — producing a different valid coloring on every click. (`LayoutManager.applyRandomProperColoring` / `_buildFaceAdjacency`)
 
+### Code-review follow-up pass
+
+Issues found in a full-project code review, fixed and covered by automated tests (`tests/` — Node unit tests plus a headless-Chromium integration suite; 32 assertions, all validated to fail on the pre-fix code):
+
+6. **Scissors falsy-ID bug.** The detach-safety BFS used `if (other && …)` — polygon id `0` is falsy, so any region containing the first-placed polygon was traversed incorrectly and mid-net seams could be cut, shattering nets into multi-face pieces. Fixed with `other !== null`. (`LayoutManager._canDetachFreeConn` / `_getIsolatedFreePoly`)
+
+7. **Library ↔ free-build mode mixing.** Loading a library solid no longer leaves stale free polygons behind (they rendered over the net and, on the next mouse-move, `_syncFreeToLibrary` silently replaced the loaded solid with a "Free-Built Net"). Loading a solid now calls `LayoutManager.clearFreeBuild()`; conversely, placing a palette shape with a solid loaded unloads the solid and resets the selector first. (`App.loadSolid`, `LayoutManager.handleMouseDown`)
+
+8. **SVG export crash on empty canvas.** `triggerSvgExport` dereferenced `this.polyhedron.faces` with no solid loaded. Now guards against null/empty layouts and non-finite bounding boxes. (`App.triggerSvgExport`)
+
+9. **GPU memory leak.** `rebuildFoldingMesh` discarded old meshes without disposing them, leaking ~2 geometries + 2 materials per face per rebuild (measured: +400 geometries after 10 rebuilds of an icosahedron). Old subtrees are now traversed and disposed. (`FoldingRenderer._disposeGroup`)
+
+10. **Free-net connection endpoints clobbered.** `buildFreeNetForFolding` wrote `u: 0, v: 0` into connections, breaking scissors-marker placement and SVG hinge lines (both resolve endpoints via `indexOf(conn.u/v)`). Real edge indices are now preserved. (`LayoutManager.buildFreeNetForFolding`)
+
+11. **Free-net V/E stats.** Stats counted duplicated per-face vertices and halved the face-edge sum (a lone square showed E:2). V and E are now counted geometrically by distinct vertex positions / edge endpoint pairs (lone square: V:4 E:4; two joined squares: V:6 E:7). (`LayoutManager.buildFreeNetForFolding`)
+
+12. **SVG export ignored per-face colors.** Exported polygons always used the global Face Color; they now use each face's own color with the same fallback chain as the canvas, via `fill-opacity` (works for named colors too, unlike a hex alpha suffix). (`App.triggerSvgExport`)
+
 ---
 
 ## Limitations & Known Behaviors

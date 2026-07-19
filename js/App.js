@@ -172,6 +172,11 @@ class AppState {
         if (!PolyRegistry[key]) return;
         this.currentKey = key;
 
+        // Switching to library mode — wipe any free-build state so stale
+        // polygons can't render over the net or clobber the solid on the
+        // next mouse-move via _syncFreeToLibrary (mode-mixing bug).
+        this.layoutManager.clearFreeBuild();
+
         const rawData = PolyRegistry[key];
         this.polyhedron = {
             name: rawData.name,
@@ -253,12 +258,18 @@ class AppState {
     }
 
     triggerSvgExport() {
+        // Nothing to export on an empty canvas (no solid loaded / after Clear).
+        if (!this.polyhedron || !this.polyhedron.faces ||
+            !this.layoutManager.faceCoords2D || this.layoutManager.faceCoords2D.length === 0) {
+            return;
+        }
         const faces = this.polyhedron.faces;
         const coords = this.layoutManager.faceCoords2D;
         const connections = this.layoutManager.connections;
 
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         coords.forEach(faceCoords => {
+            if (!faceCoords) return;
             faceCoords.forEach(p => {
                 if (p.x < minX) minX = p.x;
                 if (p.x > maxX) maxX = p.x;
@@ -266,6 +277,7 @@ class AppState {
                 if (p.y > maxY) maxY = p.y;
             });
         });
+        if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return;
 
         const padding = 30;
         const w = (maxX - minX) + padding * 2;
@@ -274,10 +286,15 @@ class AppState {
         let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">\n`;
         svg += `  <rect width="100%" height="100%" fill="#020617"/>\n`;
 
-        // Draw solid polygons
+        // Draw solid polygons — per-face color when set (same fallback chain
+        // as the 2D canvas).  fill-opacity works for hex AND named colors,
+        // unlike appending a '33' alpha suffix which only works for hex.
         coords.forEach((faceCoords, idx) => {
+            if (!faceCoords) return;
+            const faceColor = (this.polyhedron.faceColors && this.polyhedron.faceColors[idx])
+                || this.renderParams.colorFace;
             const pts = faceCoords.map(p => `${(p.x - minX + padding).toFixed(2)},${(p.y - minY + padding).toFixed(2)}`).join(' ');
-            svg += `  <polygon points="${pts}" fill="${this.renderParams.colorFace}33" stroke="#475569" stroke-width="1.5" />\n`;
+            svg += `  <polygon points="${pts}" fill="${faceColor}" fill-opacity="0.2" stroke="#475569" stroke-width="1.5" />\n`;
         });
 
         // Draw hinge lines (interior connections) - dashed

@@ -123,6 +123,22 @@ class LayoutManager {
         this.draw();
     }
 
+    /**
+     * Reset all free-build state.  Called when switching into library mode
+     * (App.loadSolid) so stale free polygons can neither render on top of
+     * the library net nor clobber the loaded solid via _syncFreeToLibrary.
+     */
+    clearFreeBuild() {
+        this.freePolygons = [];
+        this.freeConnections = [];
+        this.selectedPolygonId = null;
+        this.contextMenuPolygonId = null;
+        this.currentPaletteSides = null;
+        this.nextPolygonId = 0;
+        this._freeNetDirty = false;
+        this.canvas.style.cursor = 'grab';
+    }
+
     _getFreePolyById(id) {
         return this.freePolygons.find(p => p.id === id);
     }
@@ -342,6 +358,15 @@ class LayoutManager {
 
         // --- Palette mode: place new free polygon ---
         if (this.currentPaletteSides !== null && !this.hoveredJunction) {
+            // Switching from library mode to free-build: unload the solid
+            // first, otherwise the next mouse-move would sync the new free
+            // polygon over it and silently destroy it (mode-mixing bug).
+            if (this.app.polyhedron && this.app.polyhedron.name !== 'Free-Built Net') {
+                this.app.polyhedron = null;
+                this.app.currentKey = null;
+                this.app.shapeSelector.value = '';
+                this.app.statSubset.classList.add('hidden');
+            }
             const poly = new Polygon(
                 this.nextPolygonId++, this.currentPaletteSides, m, 0
             );
@@ -1080,7 +1105,9 @@ class LayoutManager {
                 const pid = q.shift();
                 for (const c of remaining) {
                     const other = c.polyA === pid ? c.polyB : (c.polyB === pid ? c.polyA : null);
-                    if (other && !visited.has(other)) { visited.add(other); q.push(other); }
+                    // NB: polygon ids start at 0 — must test `!== null`, not truthiness,
+                    // or id 0 becomes unreachable and mid-net seams look detachable.
+                    if (other !== null && !visited.has(other)) { visited.add(other); q.push(other); }
                 }
             }
             return visited;
@@ -1102,7 +1129,8 @@ class LayoutManager {
                 const pid = q.shift();
                 for (const c of remaining) {
                     const other = c.polyA === pid ? c.polyB : (c.polyB === pid ? c.polyA : null);
-                    if (other && !visited.has(other)) { visited.add(other); q.push(other); }
+                    // NB: polygon ids start at 0 — must test `!== null`, not truthiness.
+                    if (other !== null && !visited.has(other)) { visited.add(other); q.push(other); }
                 }
             }
             return visited.size;
@@ -1496,18 +1524,24 @@ class LayoutManager {
         });
 
         // 2. Build connections from freeConnections
+        //    u/v ARE used downstream (scissors midpoint lookup in getScissorsAt
+        //    and hinge lines in the SVG exporter both run indexOf(conn.u/v) on
+        //    the parent face), so keep the real edge endpoint indices — faces
+        //    are identity index sequences here, so edgeA / edgeA+1 are valid.
         const connections = [];
         this.freeConnections.forEach(fc => {
             const parent = polyToFaceIdx[fc.polyA];
             const child = polyToFaceIdx[fc.polyB];
             if (parent === undefined || child === undefined) return;
+            const pLen = faces[parent].length;
             connections.push({
                 id: fc.id,
                 parent: parent,
                 child: child,
                 parentEdgeIdx: fc.edgeA,
                 childEdgeIdx: fc.edgeB,
-                u: 0, v: 0  // not used for synthetic polyhedra
+                u: fc.edgeA,
+                v: (fc.edgeA + 1) % pLen
             });
         });
 
@@ -1561,8 +1595,22 @@ class LayoutManager {
             this.app.statSubset.classList.add('hidden');
         }
         this._updateIncompleteBanner();
-        this.app.statV.textContent = vertices.length;
-        this.app.statE.textContent = faces.reduce((s,f) => s + f.length, 0) / 2;
+        // V/E counted geometrically: the synthetic polyhedron duplicates
+        // vertices per face, so raw array lengths would over-report V and
+        // report E = total/2 (e.g. a lone square would show E:2).
+        const vKeys = new Set();
+        vertices.forEach(p => vKeys.add(p[0].toFixed(4) + ',' + p[1].toFixed(4)));
+        const eKeys = new Set();
+        faces.forEach(f => {
+            for (let i = 0; i < f.length; i++) {
+                const a = vertices[f[i]], b = vertices[f[(i + 1) % f.length]];
+                const ka = a[0].toFixed(4) + ',' + a[1].toFixed(4);
+                const kb = b[0].toFixed(4) + ',' + b[1].toFixed(4);
+                eKeys.add(ka < kb ? ka + '|' + kb : kb + '|' + ka);
+            }
+        });
+        this.app.statV.textContent = vKeys.size;
+        this.app.statE.textContent = eKeys.size;
         this.app.statF.textContent = faces.length;
 
         return true;
